@@ -1,8 +1,8 @@
 ---
 name: wordpress-mcp-setup
 description: Connect Hermes to a WordPress site via MCP (WordPress/mcp-adapter). Covers discovery, auth, config, pitfalls for local (ServBay) and remote WP installs, and full Elementor MCP tool reference.
-version: 2.0.0
-author: Hermes Agent
+version: 2.1.0
+author: Loic Moncany
 metadata:
   hermes:
     tags: [WordPress, MCP, Elementor, ServBay, Elementor Pro]
@@ -316,13 +316,38 @@ mcp_elementor_elementor-mcp-update-global-colors  {
 
 ---
 
+## Required WordPress Plugins
+
+Install all of these from the WordPress plugin directory or uploads:
+
+| Plugin | Source | Required for |
+|--------|--------|-------------|
+| **MCP Adapter** | [WordPress/mcp-adapter](https://github.com/WordPress/mcp-adapter) | Core MCP endpoint (`mcp-adapter-default-server`) |
+| **WordPress MCP** | WordPress.org plugin directory | Ability system (posts, pages, users, media, settings) |
+| **MCP Tools for Elementor** | WordPress.org plugin directory | Elementor MCP server (`elementor-mcp-server`) — optional, only needed for Elementor tools |
+| **Elementor** | WordPress.org plugin directory | Required if using Elementor MCP tools |
+| **Elementor Pro** | [elementor.com](https://elementor.com) | Required for Pro widgets (form, loop grid, theme builder, popups, dynamic tags, custom code) |
+
+After installing, verify all are active:
+```bash
+curl -s "https://<your-wp-site>/wp-json/wp/v2/plugins" \
+  -u "<user>:<app-password>" | python3 -c "
+import sys, json
+for p in json.load(sys.stdin):
+    print(p['status'], p['name'])
+"
+```
+
+---
+
 ## Pitfalls
 
-- **www vs non-www redirect**: `REDACTED` redirects to `www.REDACTED` but the WP REST API may return 404 on www. Always use the exact URL from `siteurl` in WP settings.
-- **Old static site vs WP**: The production domain may serve a legacy static site while WordPress lives on a staging/dev subdomain (e.g. `REDACTED`).
-- **ServBay Python**: `python3` in PATH is ServBay's alias wrapper and prints `local: can only be used in a function` warnings. Use the Hermes venv path directly.
-- **ServBay SSL**: Local ServBay sites use self-signed certs. Add `ssl_verify: false` to each MCP server block in config.yaml to avoid SSL errors.
-- **App password spaces**: WP application passwords contain spaces (e.g. `REDACTED`). Include them in the auth string before base64-encoding.
-- **REST API disabled**: Some security plugins disable the WP REST API for unauthenticated users. Always pass `-u` to curl when testing.
+- **www vs non-www**: The WP REST API may return 404 if you use the wrong variant. Always use the exact URL from `siteurl` in WP Settings > General.
+- **Subdomain vs main domain**: On staging setups, WordPress may live on a subdomain (e.g. `dev.example.com`) while the main domain serves a different site. Always target the WP install URL directly.
+- **Local dev SSL**: Local dev environments (ServBay, LocalWP, MAMP, etc.) use self-signed certificates. Add `ssl_verify: false` to each MCP server block in `config.yaml` to avoid SSL errors.
+- **macOS local Python**: On macOS local dev stacks, `python3` in PATH may point to the stack's own Python wrapper. Always use the Hermes venv path (`~/.hermes/hermes-agent/venv/bin/python`) for MCP-related commands.
+- **App password spaces**: WP Application Passwords contain spaces (e.g. `XXXX XXXX XXXX XXXX XXXX XXXX`). Include the spaces in the auth string before base64-encoding — they are valid and required.
+- **REST API disabled**: Some security plugins (Wordfence, iThemes Security, etc.) disable the WP REST API for unauthenticated users. Always pass `-u` to curl when testing. If you get a 401, check your security plugin settings.
+- **Missing Mcp-Session-Id**: Raw curl to MCP endpoints always returns `{"error": "Missing Mcp-Session-Id"}`. This is expected — the Hermes MCP client handles sessions automatically. Don't test MCP endpoints with bare curl.
 - **batch-update for efficiency**: When editing multiple elements, use `elementor-mcp-batch-update` instead of calling `update-element` repeatedly — it saves all changes in a single WP write operation.
 - **get-widget-schema before add-widget**: When using `add-widget` for less common widgets, always call `get-widget-schema` first to see all available settings — widget schemas can be large and non-obvious.
