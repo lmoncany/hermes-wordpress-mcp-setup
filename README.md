@@ -1,5 +1,7 @@
 # hermes-wordpress-mcp-setup
 
+![hero](assets/hero.png)
+
 A [Hermes Agent](https://github.com/NousResearch/hermes-agent) skill that connects your AI agent to WordPress + Elementor via MCP (Model Context Protocol).
 
 Build pages, edit layouts, update global styles, manage templates, inject code snippets — all through natural language. No clicking required.
@@ -27,21 +29,40 @@ Or inside a running session:
 
 ---
 
+## 🚀 Onboarding
+
+Once the skill is loaded, run the onboarding to connect your site:
+
+```
+Set up my WordPress site with MCP
+```
+
+The agent will:
+1. Ask for your site URL, username, and Application Password
+2. Detect which MCP plugins are already installed and active
+3. Offer to install and activate any missing plugins via the WP REST API
+4. Generate your `config.yaml` MCP server entries automatically
+5. Confirm what tools are now available (`mcp_wordpress_*`, `mcp_elementor_*`)
+
+---
+
 ## ✅ Requirements
 
 ### WordPress Plugins
 
 | Plugin | Where to get it | Required for |
 |--------|----------------|-------------|
-| **MCP Adapter** | [github.com/WordPress/mcp-adapter](https://github.com/WordPress/mcp-adapter) | Core MCP endpoint |
-| **WordPress MCP** | WordPress.org plugin directory | Posts, pages, users, media, settings |
-| **MCP Tools for Elementor** | WordPress.org plugin directory | All Elementor tools (optional) |
-| **Elementor** | WordPress.org plugin directory | Required if using Elementor tools |
-| **Elementor Pro** | [elementor.com](https://elementor.com) | Pro widgets, theme builder, popups, dynamic tags |
+| **MCP Adapter** | [github.com/WordPress/mcp-adapter](https://github.com/WordPress/mcp-adapter) | Core MCP endpoint — **required** |
+| **WordPress MCP** | WordPress.org plugin directory | Posts, pages, users, media, settings — **required** |
+| **MCP Tools for Elementor** | WordPress.org plugin directory | All Elementor MCP tools — optional |
+| **Elementor** | WordPress.org plugin directory | Required only if using Elementor tools |
+| **Elementor Pro** | [elementor.com](https://elementor.com) | Pro widgets, theme builder, popups, dynamic tags — optional |
+
+> The onboarding flow can automatically install and activate free plugins from WordPress.org. Elementor Pro requires a manual license-based install.
 
 ### Hermes Agent
 
-- Hermes Agent installed ([installation guide](https://hermes-agent.nousresearch.com/docs/))
+- Hermes Agent installed → [installation guide](https://hermes-agent.nousresearch.com/docs/)
 - `mcp` Python package supporting the 2025-06-18 spec (StreamableHTTP transport)
 
 ---

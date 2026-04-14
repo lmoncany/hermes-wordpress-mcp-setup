@@ -316,17 +316,145 @@ mcp_elementor_elementor-mcp-update-global-colors  {
 
 ---
 
+## Onboarding Flow
+
+When a user says "set up my WordPress site", "connect my WordPress", or "onboard WordPress MCP", run this interactive flow:
+
+### Step 1 — Collect credentials
+
+Ask the user for:
+- Site URL (e.g. `https://mysite.com`)
+- WordPress username
+- Application Password (Users > Profile > Application Passwords in WP admin — NOT their login password)
+
+### Step 2 — Detect installed plugins
+
+```bash
+curl -s "<site-url>/wp-json/wp/v2/plugins" \
+  -u "<user>:<app-password>" | python3 -c "
+import sys, json
+try:
+    plugins = json.load(sys.stdin)
+    for p in plugins:
+        print(p.get('plugin',''), '|', p.get('status',''), '|', p.get('name',''))
+except Exception as e:
+    print('ERROR:', e)
+"
+```
+
+Map results against required plugins:
+
+| Plugin slug | Name | Tier |
+|-------------|------|------|
+| `mcp-adapter/mcp-adapter` | MCP Adapter | Required |
+| `wordpress-mcp/wordpress-mcp` | WordPress MCP | Required |
+| `elementor-mcp/elementor-mcp` | MCP Tools for Elementor | Optional |
+| `elementor/elementor` | Elementor | Optional |
+
+### Step 3 — Report findings and offer to install
+
+Tell the user what was found, for example:
+
+> I found 2 issues:
+> - ✅ MCP Adapter — active
+> - ❌ WordPress MCP — not installed
+> - ❌ MCP Tools for Elementor — not installed
+> - ✅ Elementor — active
+>
+> Would you like me to install and activate the missing free plugins automatically?
+
+### Step 4 — Install missing plugins (if user agrees)
+
+Install from WordPress.org by POSTing the slug to the plugins endpoint:
+
+```bash
+# Install + activate in one call
+curl -s -X POST "<site-url>/wp-json/wp/v2/plugins" \
+  -u "<user>:<app-password>" \
+  -H "Content-Type: application/json" \
+  -d '{"slug": "<plugin-slug>", "status": "active"}'
+```
+
+Available free slugs:
+- `wordpress-mcp` — WordPress MCP
+- `elementor-mcp` — MCP Tools for Elementor
+- `elementor` — Elementor
+
+> Elementor Pro is a paid plugin and cannot be auto-installed. If the user wants Pro features, direct them to elementor.com to download it and install manually.
+
+If an installed plugin is inactive, activate it:
+```bash
+curl -s -X POST "<site-url>/wp-json/wp/v2/plugins/<plugin>/<plugin>" \
+  -u "<user>:<app-password>" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "active"}'
+```
+Note: use the `plugin` field value from the list response as the path (e.g. `elementor-mcp/elementor-mcp`). No URL encoding needed in the path — use the literal slash.
+
+### Step 5 — Discover MCP endpoints
+
+```bash
+curl -s "<site-url>/wp-json/mcp" -u "<user>:<app-password>"
+```
+
+Expected routes:
+- `mcp-adapter-default-server` — WordPress MCP
+- `elementor-mcp-server` — Elementor MCP (if plugin active)
+
+### Step 6 — Generate Basic Auth header
+
+```python
+import base64
+token = base64.b64encode(f"<user>:<app-password>".encode()).decode()
+print(token)
+```
+
+### Step 7 — Write config.yaml entries
+
+Append to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  wordpress:
+    url: "<site-url>/wp-json/mcp/mcp-adapter-default-server"
+    headers:
+      Authorization: "Basic <base64-token>"
+    timeout: 120
+    connect_timeout: 60
+
+  elementor:                          # only if elementor-mcp is active
+    url: "<site-url>/wp-json/mcp/elementor-mcp-server"
+    headers:
+      Authorization: "Basic <base64-token>"
+    timeout: 120
+    connect_timeout: 60
+```
+
+For local dev with self-signed SSL, add `ssl_verify: false` to each block.
+
+### Step 8 — Confirm and summarise
+
+Tell the user:
+> Setup complete! Restart Hermes to load the new MCP tools.
+> Available after restart:
+> - `mcp_wordpress_*` — X tools (posts, pages, users, media, settings...)
+> - `mcp_elementor_*` — 100 tools (only if Elementor MCP was installed)
+
+---
+
 ## Required WordPress Plugins
 
 Install all of these from the WordPress plugin directory or uploads:
 
-| Plugin | Source | Required for |
-|--------|--------|-------------|
-| **MCP Adapter** | [WordPress/mcp-adapter](https://github.com/WordPress/mcp-adapter) | Core MCP endpoint (`mcp-adapter-default-server`) |
-| **WordPress MCP** | WordPress.org plugin directory | Ability system (posts, pages, users, media, settings) |
-| **MCP Tools for Elementor** | WordPress.org plugin directory | Elementor MCP server (`elementor-mcp-server`) — optional, only needed for Elementor tools |
-| **Elementor** | WordPress.org plugin directory | Required if using Elementor MCP tools |
-| **Elementor Pro** | [elementor.com](https://elementor.com) | Required for Pro widgets (form, loop grid, theme builder, popups, dynamic tags, custom code) |
+| Plugin | Source | Required? |
+|--------|--------|-----------|
+| **MCP Adapter** | [WordPress/mcp-adapter](https://github.com/WordPress/mcp-adapter) | ✅ Required — core MCP endpoint |
+| **WordPress MCP** | WordPress.org (`wordpress-mcp`) | ✅ Required — posts, pages, users, media, settings |
+| **MCP Tools for Elementor** | WordPress.org (`elementor-mcp`) | ⚙️ Optional — enables all 100 Elementor tools |
+| **Elementor** | WordPress.org (`elementor`) | ⚙️ Optional — needed only if using Elementor tools |
+| **Elementor Pro** | [elementor.com](https://elementor.com) | ⚙️ Optional — Pro widgets, theme builder, popups, dynamic tags |
+
+The onboarding flow auto-installs and activates any missing free plugins (MCP Adapter, WordPress MCP, MCP Tools for Elementor, Elementor) directly via the WP REST API. Elementor Pro requires a manual install due to its paid license.
 
 After installing, verify all are active:
 ```bash
@@ -344,7 +472,7 @@ for p in json.load(sys.stdin):
 
 - **www vs non-www**: The WP REST API may return 404 if you use the wrong variant. Always use the exact URL from `siteurl` in WP Settings > General.
 - **Subdomain vs main domain**: On staging setups, WordPress may live on a subdomain (e.g. `dev.example.com`) while the main domain serves a different site. Always target the WP install URL directly.
-- **Local dev SSL**: Local dev environments (ServBay, LocalWP, MAMP, etc.) use self-signed certificates. Add `ssl_verify: false` to each MCP server block in `config.yaml` to avoid SSL errors.
+- **Local dev SSL**: Local dev environments (ServBay, LocalWP, MAMP, etc.) use self-signed certificates. Add `ssl_verify: false` to each MCP server block in `config.yaml` to avoid SSL errors. If omitted, Hermes silently fails to connect at session start with `[SSL: CERTIFICATE_VERIFY_FAILED]` and the MCP tools never appear — verify by checking `~/.hermes/logs/agent.log` for the error. Fix: add `ssl_verify: false` then restart Hermes.
 - **macOS local Python**: On macOS local dev stacks, `python3` in PATH may point to the stack's own Python wrapper. Always use the Hermes venv path (`~/.hermes/hermes-agent/venv/bin/python`) for MCP-related commands.
 - **App password spaces**: WP Application Passwords contain spaces (e.g. `XXXX XXXX XXXX XXXX XXXX XXXX`). Include the spaces in the auth string before base64-encoding — they are valid and required.
 - **REST API disabled**: Some security plugins (Wordfence, iThemes Security, etc.) disable the WP REST API for unauthenticated users. Always pass `-u` to curl when testing. If you get a 401, check your security plugin settings.
