@@ -1,7 +1,7 @@
 ---
 name: wordpress-mcp-setup
 description: Connect Hermes to a WordPress site via MCP (WordPress/mcp-adapter). Covers discovery, auth, config, pitfalls for local (ServBay) and remote WP installs, and full Elementor MCP tool reference.
-version: 2.1.0
+version: 2.2.0
 author: Loic Moncany
 metadata:
   hermes:
@@ -482,3 +482,8 @@ for p in json.load(sys.stdin):
 - **Missing Mcp-Session-Id**: Raw curl to MCP endpoints always returns `{"error": "Missing Mcp-Session-Id"}`. This is expected — the Hermes MCP client handles sessions automatically. Don't test MCP endpoints with bare curl.
 - **batch-update for efficiency**: When editing multiple elements, use `elementor-mcp-batch-update` instead of calling `update-element` repeatedly — it saves all changes in a single WP write operation.
 - **get-widget-schema before add-widget**: When using `add-widget` for less common widgets, always call `get-widget-schema` first to see all available settings — widget schemas can be large and non-obvious.
+- **ssl_verify patch gets wiped on Hermes updates**: The `ssl_verify: false` config key requires a patch to `~/.hermes/hermes-agent/tools/mcp_tool.py` to actually take effect (the value was read but not passed to httpx). A fix has been submitted upstream (PR #13038 on NousResearch/hermes-agent). Until merged, after any `hermes update` you must re-apply this patch manually:
+  1. Line ~953: add `ssl_verify = config.get("ssl_verify", True)` after the `connect_timeout` line
+  2. Line ~982 (new API): add `"verify": ssl_verify,` to `client_kwargs` dict
+  3. Line ~1006 (legacy API): add `"verify": ssl_verify,` to `_http_kwargs` dict
+  Then restart Hermes. Confirm by checking `~/.hermes/logs/agent.log` — should show tools registered, not SSL errors.
